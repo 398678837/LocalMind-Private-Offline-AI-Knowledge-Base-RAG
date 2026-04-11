@@ -68,7 +68,77 @@ LocalMind/
 
 ## 🚀 快速开始
 
-（开发中...）
+### 前置要求
+1. **Python 3.10+**
+2. **Node.js 18+**
+3. **Ollama** - [下载安装](https://ollama.ai/)
+
+### 安装 Ollama 模型
+```bash
+# 拉取对话模型
+ollama pull qwen2:7b
+
+# 拉取向量化模型
+ollama pull nomic-embed-text:latest
+```
+
+### 后端部署
+
+#### 1. 创建虚拟环境
+```bash
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Linux/Mac
+source venv/bin/activate
+```
+
+#### 2. 安装依赖
+```bash
+pip install -r requirements.txt
+```
+
+#### 3. 启动后端
+```bash
+cd backend
+python main.py
+```
+
+后端将运行在：http://127.0.0.1:8000
+
+API 文档：http://127.0.0.1:8000/docs
+
+### 前端部署
+
+#### 1. 安装依赖
+```bash
+cd frontend
+npm install
+```
+
+#### 2. 启动前端
+```bash
+npm run dev
+```
+
+前端将运行在：http://localhost:5173
+
+### 使用说明
+1. 打开 http://localhost:5173
+2. 创建知识库
+3. 上传文档（支持 PDF/DOCX/TXT/MD/PY/JAVA）
+4. 开始对话！
+
+## ✨ 已实现功能
+- ✅ 创建、编辑、删除知识库
+- ✅ 文件上传与管理
+- ✅ 文档自动解析与向量化
+- ✅ RAG 问答系统
+- ✅ 对话会话管理
+- ✅ 多语言支持（中文/英文/日语/韩语）
+- ✅ 100% 本地私有化，无云端请求
 
 ## 📖 文档
 

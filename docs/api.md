@@ -260,13 +260,230 @@ DELETE /api/v1/files/{file_id}
 - `processed`: 处理完成
 - `error`: 处理失败
 
-## 三、文档处理接口（待实现）
+---
 
-## 四、AI 对话接口（待实现）
+## 三、AI 对话接口
 
-## 五、系统配置接口（已部分实现）
+### 3.1 创建会话
+```
+POST /api/v1/chat/sessions
+```
 
-### 5.1 获取系统状态
+**请求体**:
+```json
+{
+  "title": "新对话",
+  "knowledge_base_id": "kb_001"
+}
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "session_001",
+    "title": "新对话",
+    "knowledge_base_id": "kb_001",
+    "created_at": "2026-04-11T10:00:00Z",
+    "updated_at": "2026-04-11T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 3.2 获取会话列表
+```
+GET /api/v1/chat/sessions?knowledge_base_id={kb_id}
+```
+
+**查询参数**:
+- `knowledge_base_id` (可选): 知识库ID，不传则返回所有会话
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "session_001",
+      "title": "新对话",
+      "knowledge_base_id": "kb_001",
+      "created_at": "2026-04-11T10:00:00Z",
+      "updated_at": "2026-04-11T10:05:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 3.3 获取会话详情
+```
+GET /api/v1/chat/sessions/{id}
+```
+
+**路径参数**:
+- `id`: 会话ID
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "session_001",
+    "title": "新对话",
+    "knowledge_base_id": "kb_001",
+    "created_at": "2026-04-11T10:00:00Z",
+    "updated_at": "2026-04-11T10:05:00Z"
+  }
+}
+```
+
+---
+
+### 3.4 更新会话标题
+```
+PUT /api/v1/chat/sessions/{id}/title
+```
+
+**路径参数**:
+- `id`: 会话ID
+
+**请求体**:
+```json
+{
+  "title": "已更新的标题"
+}
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "session_001",
+    "title": "已更新的标题",
+    "created_at": "2026-04-11T10:00:00Z",
+    "updated_at": "2026-04-11T10:10:00Z"
+  }
+}
+```
+
+---
+
+### 3.5 删除会话
+```
+DELETE /api/v1/chat/sessions/{id}
+```
+
+**路径参数**:
+- `id`: 会话ID
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "message": "会话删除成功"
+}
+```
+
+---
+
+### 3.6 获取会话消息列表
+```
+GET /api/v1/chat/sessions/{id}/messages
+```
+
+**路径参数**:
+- `id`: 会话ID
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "msg_001",
+      "session_id": "session_001",
+      "role": "user",
+      "content": "什么是 AI？",
+      "created_at": "2026-04-11T10:00:00Z"
+    },
+    {
+      "id": "msg_002",
+      "session_id": "session_001",
+      "role": "assistant",
+      "content": "AI（人工智能）是...",
+      "created_at": "2026-04-11T10:00:10Z"
+    }
+  ]
+}
+```
+
+---
+
+### 3.7 发送消息（RAG 问答）
+```
+POST /api/v1/chat/send
+```
+
+**请求体**:
+```json
+{
+  "knowledge_base_id": "kb_001",
+  "query": "什么是 RAG？",
+  "session_id": "session_001"  // 可选，不传则自动创建新会话
+}
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "session_id": "session_001",
+    "user_message": {
+      "id": "msg_001",
+      "content": "什么是 RAG？",
+      "role": "user",
+      "created_at": "2026-04-11T10:00:00Z"
+    },
+    "assistant_message": {
+      "id": "msg_002",
+      "content": "RAG（检索增强生成）是...",
+      "role": "assistant",
+      "created_at": "2026-04-11T10:00:10Z"
+    }
+  }
+}
+```
+
+---
+
+### 3.8 检查 Ollama 状态
+```
+GET /api/v1/chat/ollama/status
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "available": true,
+    "model": "qwen2:7b",
+    "embedding_model": "nomic-embed-text:latest"
+  }
+}
+```
+
+---
+
+## 四、系统配置接口
+
+### 4.1 获取系统状态
 ```
 GET /api/v1/status
 ```
@@ -277,10 +494,10 @@ GET /api/v1/status
   "app_name": "LocalMind - 本地私有化 AI 知识库",
   "version": "1.0.0",
   "ollama_url": "http://localhost:11434",
-  "ollama_model": "llama3:8b",
-  "embedding_model": "all-MiniLM-L6-v2",
-  "file_encryption_enabled": true,
-  "sensitive_detection_enabled": true
+  "ollama_model": "qwen2:7b",
+  "embedding_model": "nomic-embed-text:latest",
+  "file_encryption_enabled": false,
+  "sensitive_detection_enabled": false
 }
 ```
 

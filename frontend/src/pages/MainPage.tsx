@@ -1,19 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import type { KnowledgeBase, Document, ChatSession, ChatMessage } from '../types'
 import { knowledgeBaseApi, documentApi, chatApi } from '../api'
+import { useI18n, type Locale, localeInfo } from '../i18n/index'
 
 const statusColors: Record<string, string> = {
   uploaded: 'bg-yellow-100 text-yellow-800',
   processing: 'bg-blue-100 text-blue-800',
   processed: 'bg-green-100 text-green-800',
   error: 'bg-red-100 text-red-800'
-}
-
-const statusLabels: Record<string, string> = {
-  uploaded: '已上传',
-  processing: '处理中',
-  processed: '已完成',
-  error: '处理失败'
 }
 
 const fileTypeIcons: Record<string, string> = {
@@ -34,6 +28,17 @@ function formatFileSize(bytes: number): string {
 }
 
 export default function MainPage() {
+  const { t, locale, setLocale } = useI18n()
+  const [showLangMenu, setShowLangMenu] = useState(false)
+  const langMenuRef = useRef<HTMLDivElement>(null)
+  
+  const statusLabels: Record<string, string> = {
+    uploaded: t('document.uploaded'),
+    processing: t('document.processing'),
+    processed: t('document.processed'),
+    error: t('document.error')
+  }
+  
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
   const [selectedKB, setSelectedKB] = useState<string>('')
   const [kbLoading, setKbLoading] = useState(true)
@@ -79,6 +84,17 @@ export default function MainPage() {
   const [sendingMessage, setSendingMessage] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setShowLangMenu(false)
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     loadKnowledgeBases()
@@ -454,20 +470,61 @@ export default function MainPage() {
     <div className="flex h-screen bg-gray-50">
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800">localmind 知识库</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-800">Localmind</h2>
+            <div className="relative" ref={langMenuRef}>
+              <button
+                onClick={() => setShowLangMenu(!showLangMenu)}
+                className="flex items-center space-x-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium"
+              >
+                <span>{localeInfo[locale].flag}</span>
+                <span className="text-gray-700">{localeInfo[locale].name}</span>
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showLangMenu && (
+                <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  {(Object.entries(localeInfo) as [Locale, typeof localeInfo['zh-CN']][]).map(([key, info]) => (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        setLocale(key)
+                        setShowLangMenu(false)
+                      }}
+                      className={`w-full flex items-center space-x-2 px-3 py-2 text-left text-sm transition-colors ${
+                        locale === key 
+                          ? 'bg-blue-50 text-blue-700' 
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{info.flag}</span>
+                      <span>{info.name}</span>
+                      {locale === key && (
+                        <svg className="w-4 h-4 ml-auto text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
           <button 
             onClick={() => { resetForm(); setShowNewKbModal(true) }}
             className="mt-2 w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
           >
-            + 新建知识库
+            {t('sidebar.createKb')}
           </button>
         </div>
         
         <div className="flex-1 overflow-y-auto p-2">
           {kbLoading ? (
-            <div className="p-4 text-center text-gray-500">加载中...</div>
+            <div className="p-4 text-center text-gray-500">{t('common.loading')}</div>
           ) : knowledgeBases.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">暂无知识库，点击上方按钮创建</div>
+            <div className="p-4 text-center text-gray-500">{t('knowledgeBase.noKb')}</div>
           ) : (
             knowledgeBases.map((kb) => (
               <div
@@ -487,14 +544,14 @@ export default function MainPage() {
                       {kb.name}
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">
-                      {kb.fileCount} 个文件
+                      {kb.fileCount} {t('common.fileCount')}
                     </p>
                   </div>
                   <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
                     <button
                       onClick={(e) => handleOpenEditModal(kb, e)}
                       className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded"
-                      title="编辑"
+                      title={t('common.edit')}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -503,7 +560,7 @@ export default function MainPage() {
                     <button
                       onClick={(e) => handleOpenDeleteConfirm(kb, e)}
                       className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded"
-                      title="删除"
+                      title={t('common.delete')}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -526,19 +583,19 @@ export default function MainPage() {
                   {currentKB.name}
                 </h2>
                 <p className="text-sm text-gray-500">
-                  {currentKB.description || '与 AI 助手对话，基于知识库内容'}
+                  {currentKB.description || t('status.withKbDesc')}
                 </p>
               </div>
               <button
                 onClick={handleCreateNewSession}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
               >
-                + 新建对话
+                {t('chat.newChat')}
               </button>
             </>
           ) : (
             <h2 className="text-lg font-semibold text-gray-800">
-              请选择或创建一个知识库
+              {t('knowledgeBase.selectKb')}
             </h2>
           )}
         </div>
@@ -546,14 +603,14 @@ export default function MainPage() {
         <div className="flex-1 flex">
           <div className="w-64 border-r border-gray-200 flex flex-col">
             <div className="p-3 border-b border-gray-200">
-              <h3 className="font-medium text-gray-700">对话历史</h3>
+              <h3 className="font-medium text-gray-700">{t('chat.title')}</h3>
             </div>
             <div className="flex-1 overflow-y-auto p-2">
               {sessionsLoading ? (
-                <div className="p-4 text-center text-gray-500 text-sm">加载中...</div>
+                <div className="p-4 text-center text-gray-500 text-sm">{t('common.loading')}</div>
               ) : chatSessions.length === 0 ? (
                 <div className="p-4 text-center text-gray-500 text-sm">
-                  暂无对话，点击"新建对话"开始
+                  {t('chat.noChat')}
                 </div>
               ) : (
                 <>
@@ -595,12 +652,12 @@ export default function MainPage() {
                                 <p className={`font-medium text-sm truncate ${
                                   selectedSession === session.id ? 'text-blue-700' : 'text-gray-700'
                                 }`}>
-                                  {session.title || '新对话'}
+                                  {session.title || t('chat.newSession')}
                                 </p>
                               </div>
                             )}
                             <p className="text-xs text-gray-500 mt-1">
-                              {new Date(session.updatedAt).toLocaleString('zh-CN')}
+                              {new Date(session.updatedAt).toLocaleString()}
                             </p>
                           </div>
                           <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
@@ -611,7 +668,7 @@ export default function MainPage() {
                                   ? 'text-yellow-500 bg-yellow-100'
                                   : 'text-gray-400 hover:text-yellow-500 hover:bg-yellow-100'
                               }`}
-                              title={pinnedSessions.includes(session.id) ? '取消置顶' : '置顶'}
+                              title={pinnedSessions.includes(session.id) ? t('chat.unpin') : t('chat.pin')}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -620,7 +677,7 @@ export default function MainPage() {
                             <button
                               onClick={(e) => handleOpenRenameSession(session, e)}
                               className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded"
-                              title="重命名"
+                              title={t('chat.rename')}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -647,11 +704,11 @@ export default function MainPage() {
           <div className="flex-1 flex flex-col h-0">
             <div className="flex-1 overflow-y-auto p-4">
               {messagesLoading ? (
-                <div className="text-center text-gray-500 mt-8">加载中...</div>
+                <div className="text-center text-gray-500 mt-8">{t('common.loading')}</div>
               ) : messages.length === 0 ? (
                 <div className="text-center text-gray-500 mt-8">
-                  <p className="text-lg">开始与 AI 对话吧！</p>
-                  <p className="text-sm mt-2">发送您的问题，AI 会基于知识库内容回答</p>
+                  <p className="text-lg">{t('chat.startChat')}</p>
+                  <p className="text-sm mt-2">{t('chat.startChatDesc')}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -677,7 +734,7 @@ export default function MainPage() {
                           <p className={`text-xs mt-1 ${
                             message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
                           }`}>
-                            {new Date(message.createdAt).toLocaleTimeString('zh-CN')}
+                            {new Date(message.createdAt).toLocaleTimeString()}
                           </p>
                         </div>
                       </div>
@@ -711,7 +768,7 @@ export default function MainPage() {
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={handleKeyPress}
                   disabled={!currentKB || !selectedSession || sendingMessage}
-                  placeholder={!currentKB ? "请先选择知识库" : !selectedSession ? "请先选择或创建对话" : "输入您的问题..."}
+                  placeholder={!currentKB ? t('common.selectKbFirst') : !selectedSession ? t('common.selectOrCreateSession') : t('common.enterQuestion')}
                   className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 resize-none"
                   rows={2}
                 />
@@ -720,7 +777,7 @@ export default function MainPage() {
                   disabled={!currentKB || !selectedSession || !messageInput.trim() || sendingMessage}
                   className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors disabled:bg-gray-400 self-end"
                 >
-                  {sendingMessage ? '发送中...' : '发送'}
+                  {sendingMessage ? t('common.sending') : t('common.send')}
                 </button>
               </div>
             </div>
@@ -730,7 +787,7 @@ export default function MainPage() {
 
       <div className="w-72 bg-white border-l border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800">文件</h2>
+          <h2 className="text-lg font-semibold text-gray-800">{t('document.title')}</h2>
           <input
             ref={fileInputRef}
             type="file"
@@ -746,22 +803,22 @@ export default function MainPage() {
             onDragOver={handleDragOver}
             className="mt-2 w-full border-2 border-dashed border-gray-300 text-gray-500 px-4 py-3 rounded-lg text-sm font-medium hover:border-blue-500 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {uploading ? '上传中...' : '+ 上传文件'}
+            {uploading ? t('common.uploading') : t('common.uploadFile')}
           </button>
         </div>
         
         <div className="flex-1 overflow-y-auto p-2">
           {!currentKB ? (
             <div className="text-center text-gray-500 p-4">
-            请先选择知识库
+            {t('document.selectKbFirst')}
           </div>
           ) : docsLoading ? (
             <div className="text-center text-gray-500 p-4">
-              加载中...
+              {t('common.loading')}
             </div>
           ) : documents.length === 0 ? (
             <div className="text-center text-gray-500 p-4">
-              暂无文件，点击上方按钮上传
+              {t('common.noFile')}
             </div>
           ) : (
             documents.map((doc) => (
@@ -781,7 +838,7 @@ export default function MainPage() {
                   <button
                     onClick={(e) => handleOpenDeleteDocConfirm(doc, e)}
                     className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="删除"
+                    title={t('common.delete')}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -803,29 +860,29 @@ export default function MainPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">
-              创建新知识库
+              {t('knowledgeBase.createTitle')}
             </h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  知识库名称
+                  {t('knowledgeBase.name')}
                 </label>
                 <input
                   type="text"
                   value={kbFormData.name}
                   onChange={(e) => setKbFormData({ ...kbFormData, name: e.target.value })}
-                  placeholder="请输入知识库名称"
+                  placeholder={t('knowledgeBase.namePlaceholder')}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  描述（可选）
+                  {t('knowledgeBase.description')}
                 </label>
                 <textarea
                   value={kbFormData.description}
                   onChange={(e) => setKbFormData({ ...kbFormData, description: e.target.value })}
-                  placeholder="请输入知识库描述"
+                  placeholder={t('knowledgeBase.descPlaceholder')}
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -836,14 +893,14 @@ export default function MainPage() {
                 onClick={() => { resetForm(); setShowNewKbModal(false) }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleCreateKnowledgeBase}
                 disabled={!kbFormData.name.trim()}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
               >
-                创建
+                {t('common.create')}
               </button>
             </div>
           </div>
@@ -854,29 +911,29 @@ export default function MainPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">
-              编辑知识库
+              {t('knowledgeBase.editTitle')}
             </h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  知识库名称
+                  {t('knowledgeBase.name')}
                 </label>
                 <input
                   type="text"
                   value={kbFormData.name}
                   onChange={(e) => setKbFormData({ ...kbFormData, name: e.target.value })}
-                  placeholder="请输入知识库名称"
+                  placeholder={t('knowledgeBase.namePlaceholder')}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  描述（可选）
+                  {t('knowledgeBase.description')}
                 </label>
                 <textarea
                   value={kbFormData.description}
                   onChange={(e) => setKbFormData({ ...kbFormData, description: e.target.value })}
-                  placeholder="请输入知识库描述"
+                  placeholder={t('knowledgeBase.descPlaceholder')}
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -887,14 +944,14 @@ export default function MainPage() {
                 onClick={() => { resetForm(); setShowEditKbModal(false) }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleUpdateKnowledgeBase}
                 disabled={!kbFormData.name.trim()}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
               >
-                保存
+                {t('common.save')}
               </button>
             </div>
           </div>
@@ -905,23 +962,23 @@ export default function MainPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">
-              确认删除
+              {t('modal.confirmDelete')}
             </h3>
             <p className="text-gray-600 mb-6">
-              确定要删除这个知识库吗？此操作不可撤销。
+              {t('knowledgeBase.deleteConfirm')}
             </p>
             <div className="flex space-x-3">
               <button
                 onClick={() => { resetForm(); setShowDeleteConfirm(false) }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleDeleteKnowledgeBase}
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
-                删除
+                {t('common.delete')}
               </button>
             </div>
           </div>
@@ -932,23 +989,23 @@ export default function MainPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">
-              确认删除
+              {t('modal.confirmDelete')}
             </h3>
             <p className="text-gray-600 mb-6">
-              确定要删除这个文件吗？此操作不可撤销。
+              {t('document.deleteConfirm')}
             </p>
             <div className="flex space-x-3">
               <button
                 onClick={() => { resetForm(); setShowDeleteDocConfirm(false) }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleDeleteDocument}
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
-                删除
+                {t('common.delete')}
               </button>
             </div>
           </div>
@@ -959,23 +1016,23 @@ export default function MainPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">
-              确认删除
+              {t('modal.confirmDelete')}
             </h3>
             <p className="text-gray-600 mb-6">
-              确定要删除这个对话吗？此操作不可撤销。
+              {t('chat.deleteConfirm')}
             </p>
             <div className="flex space-x-3">
               <button
                 onClick={() => { resetForm(); setShowDeleteSessionConfirm(false) }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleDeleteSession}
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
-                删除
+                {t('common.delete')}
               </button>
             </div>
           </div>

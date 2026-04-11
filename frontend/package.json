@@ -1,8 +1,7 @@
 {
   "name": "localmind-frontend",
-  "version": "1.0.0",
-  "description": "LocalMind - 本地私有化 AI 知识库问答助手前端",
   "private": true,
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

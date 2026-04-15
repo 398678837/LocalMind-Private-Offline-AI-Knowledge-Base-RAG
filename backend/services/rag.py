@@ -1,142 +1,184 @@
 
-import requests
-import json
-from typing import List, Optional
+
+import time
+from typing import List, Tuple, Optional
+from langchain_community.chat_models import ChatOllama
+from langchain_core.prompts import PromptTemplate
+from langchain.chains import RetrievalQA
+from langchain_core.output_parsers import StrOutputParser
 from backend.config.settings import settings
 from backend.utils.vector_db import vector_db
-from backend.models.schemas import RetrievedDocument
 
 
 class RAGService:
-    """RAG 服务 - 检索增强生成"""
+    """RAG 服务 - 使用 LangChain RAG Chain"""
     
     def __init__(self):
         self.ollama_url = settings.OLLAMA_BASE_URL
         self.ollama_model = settings.OLLAMA_MODEL
+        self._llm = None
+        self._max_retries = 3
+        self._retry_delay = 5
+    
+    def _get_llm(self) -> ChatOllama:
+        """获取 LangChain ChatOllama 实例"""
+        if self._llm is None:
+            self._llm = ChatOllama(
+                model=self.ollama_model,
+                base_url=self.ollama_url,
+                temperature=0.1,
+                repeat_penalty=1.2,
+                request_timeout=180
+            )
+        return self._llm
     
     def check_ollama_available(self) -> bool:
         """检查 Ollama 是否可用"""
         try:
-            response = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
-            return response.status_code == 200
+            llm = self._get_llm()
+            llm.invoke("hello")
+            return True
         except Exception as e:
             print(f"[WARNING] Ollama 不可用: {e}")
             return False
     
-    def retrieve_documents(self, knowledge_base_id: str, query: str, top_k: int = 5) -> List[RetrievedDocument]:
-        """从向量数据库检索相关文档"""
+    def get_retriever(self, knowledge_base_id: str, top_k: int = 5):
+        """获取 LangChain 检索器"""
         try:
-            collection_name = f"kb_{knowledge_base_id}"
-            print(f"[RAG] 正在从集合 {collection_name} 检索文档，查询: {query}")
+            from backend.utils.vector_db import vector_db
             
+            collection_name = f"kb_{knowledge_base_id}"
             doc_count = vector_db.count_documents(collection_name)
             print(f"[RAG] 集合 {collection_name} 中有 {doc_count} 个文档")
             
-            results = vector_db.query_similar(
-                collection_name=collection_name,
-                query_text=query,
-                n_results=top_k
+            if doc_count == 0:
+                print(f"[WARNING] 集合中没有文档")
+                return None
+            
+            vectorstore = vector_db._get_vectorstore(collection_name)
+            if not vectorstore:
+                print(f"[ERROR] 无法获取向量存储")
+                return None
+            
+            retriever = vectorstore.as_retriever(
+                search_kwargs={"k": top_k}
             )
-            
-            print(f"[RAG] 检索到 {len(results)} 个相关文档")
-            for i, result in enumerate(results):
-                print(f"[RAG] 文档 {i+1}: 相似度={result['similarity']:.2f}, 内容前100字={result['content'][:100]}...")
-            
-            retrieved_docs = []
-            for result in results:
-                retrieved_docs.append(RetrievedDocument(
-                    content=result['content'],
-                    metadata=result['metadata'],
-                    similarity=result['similarity']
-                ))
-            
-            return retrieved_docs
+            return retriever
         except Exception as e:
-            print(f"[ERROR] 检索文档失败: {e}")
-            return []
+            print(f"[ERROR] 获取检索器失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
-    def build_prompt(self, query: str, retrieved_docs: List[RetrievedDocument]) -> str:
-        """构建 RAG 提示词"""
-        context = "\n\n".join([
-            f"文档片段 {i+1} (相似度: {doc.similarity:.2f}):\n{doc.content}"
-            for i, doc in enumerate(retrieved_docs)
-        ])
-        
-        prompt = f"""你是 LocalMind AI 助手，一个专业的本地知识库问答助手。请根据以下提供的文档片段来回答用户的问题。
+    def build_rag_chain(self, knowledge_base_id: str, top_k: int = 5) -> Optional[RetrievalQA]:
+        """构建 LangChain RAG Chain"""
+        try:
+            retriever = self.get_retriever(knowledge_base_id, top_k)
+            if not retriever:
+                return None
+            
+            llm = self._get_llm()
+            
+            prompt_template = """你是 LocalMind AI 助手，一个专业的本地知识库问答助手。请根据以下提供的文档片段来回答用户的问题。
 
 文档片段：
 {context}
 
-用户问题：{query}
+用户问题：{question}
 
 回答要求：
 1. 基于提供的文档片段回答问题
 2. 如果文档片段中没有相关信息，请明确说明
 3. 回答要简洁、准确、有条理
 4. 不要编造文档中没有的信息"""
-        
-        print(f"[RAG] 构建的提示词:\n{prompt}\n")
-        return prompt
-    
-    def generate_response(self, prompt: str) -> str:
-        """调用 Ollama 生成回复"""
-        try:
-            if not self.check_ollama_available():
-                return "抱歉，本地 LLM 服务（Ollama）未启动，请先启动 Ollama 后再试。"
-            
-            print(f"[RAG] 正在调用 Ollama 模型: {self.ollama_model}")
-            
-            payload = {
-                "model": self.ollama_model,
-                "prompt": prompt,
-                "stream": False
-            }
-            
-            response = requests.post(
-                f"{self.ollama_url}/api/generate",
-                json=payload,
-                timeout=120
+
+            prompt = PromptTemplate(
+                template=prompt_template,
+                input_variables=["context", "question"]
             )
             
-            if response.status_code == 200:
-                result = response.json()
-                response_text = result.get("response", "抱歉，生成回复时出错。")
-                print(f"[RAG] Ollama 生成的回复:\n{response_text}\n")
-                return response_text
-            else:
-                error_msg = f"抱歉，LLM 服务返回错误: {response.status_code}"
-                print(f"[RAG] {error_msg}")
-                return error_msg
-        
-        except requests.exceptions.Timeout:
-            return "抱歉，生成回复超时，请稍后再试。"
+            rag_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": prompt}
+            )
+            
+            print(f"[RAG] RAG Chain 构建成功")
+            return rag_chain
         except Exception as e:
-            print(f"[ERROR] 生成回复失败: {e}")
-            return f"抱歉，生成回复时出错: {str(e)}"
+            print(f"[ERROR] 构建 RAG Chain 失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
-    def chat(self, knowledge_base_id: str, query: str) -> tuple[str, List[RetrievedDocument]]:
+    def chat(self, knowledge_base_id: str, query: str, top_k: int = 5) -> Tuple[str, List[dict]]:
         """完整的 RAG 聊天流程"""
         print(f"\n[RAG] ===== 开始 RAG 聊天流程 =====")
         print(f"[RAG] 知识库 ID: {knowledge_base_id}")
         print(f"[RAG] 用户查询: {query}")
         
-        # 1. 检索相关文档
-        retrieved_docs = self.retrieve_documents(knowledge_base_id, query)
-        print(f"[RAG] 检索到 {len(retrieved_docs)} 个文档")
-        
-        # 2. 构建提示词
-        if retrieved_docs:
-            prompt = self.build_prompt(query, retrieved_docs)
-        else:
-            prompt = f"用户问题：{query}\n\n注意：知识库中没有找到相关文档，请直接回答用户问题。"
-            print(f"[RAG] 没有检索到文档，使用简单提示词")
-        
-        # 3. 生成回复
-        response = self.generate_response(prompt)
-        
-        print(f"[RAG] ===== RAG 聊天流程结束 =====\n")
-        return response, retrieved_docs
+        try:
+            if not self.check_ollama_available():
+                return "抱歉，本地 LLM 服务（Ollama）未启动，请先启动 Ollama 后再试。", []
+            
+            rag_chain = self.build_rag_chain(knowledge_base_id, top_k)
+            
+            if not rag_chain:
+                print(f"[RAG] 没有可用的检索器，使用简单提示词")
+                return self._fallback_chat(query)
+            
+            print(f"[RAG] 正在调用 Ollama 模型: {self.ollama_model}")
+            
+            result = rag_chain.invoke({"query": query})
+            
+            response_text = result.get("result", "")
+            if hasattr(result, 'content'):
+                response_text = result.content
+            
+            source_documents = []
+            if hasattr(result, 'source_documents'):
+                source_documents = result.source_documents
+            elif 'source_documents' in result:
+                source_documents = result['source_documents']
+            
+            retrieved_docs = []
+            for doc in source_documents:
+                retrieved_docs.append({
+                    'content': doc.page_content if hasattr(doc, 'page_content') else str(doc),
+                    'metadata': doc.metadata if hasattr(doc, 'metadata') else {},
+                    'similarity': 1.0
+                })
+            
+            print(f"[RAG] 检索到 {len(retrieved_docs)} 个相关文档")
+            print(f"[RAG] Ollama 生成的回复:\n{response_text[:200]}...\n")
+            
+            print(f"[RAG] ===== RAG 聊天流程结束 =====\n")
+            return response_text, retrieved_docs
+            
+        except Exception as e:
+            print(f"[ERROR] RAG 聊天失败: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            print(f"[RAG] 使用降级策略...")
+            return self._fallback_chat(query)
+    
+    def _fallback_chat(self, query: str) -> Tuple[str, List[dict]]:
+        """降级聊天（无检索时直接回答）"""
+        try:
+            llm = self._get_llm()
+            prompt = f"用户问题：{query}\n\n请直接回答用户问题。"
+            response = llm.invoke(prompt)
+            response_text = response.content if hasattr(response, 'content') else str(response)
+            print(f"[RAG] 降级策略成功")
+            print(f"[RAG] ===== RAG 聊天流程结束 =====\n")
+            return response_text, []
+        except Exception as e2:
+            print(f"[ERROR] 降级策略也失败: {e2}")
+            print(f"[RAG] ===== RAG 聊天流程结束 =====\n")
+            return f"抱歉，AI 服务暂时不可用，请检查 Ollama 是否正常运行。", []
 
 
 rag_service = RAGService()
-

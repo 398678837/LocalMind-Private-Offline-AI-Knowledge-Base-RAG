@@ -701,8 +701,8 @@ export default function MainPage() {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col h-0">
-            <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 overflow-y-auto p-4" id="chat-messages-container">
               {messagesLoading ? (
                 <div className="text-center text-gray-500 mt-8">{t('common.loading')}</div>
               ) : messages.length === 0 ? (
